@@ -1,0 +1,12 @@
+# PlatformIO build cache — regenerated on every build, never commit
+.pio/
+
+# VS Code workspace state
+.vscode/
+
+# macOS
+.DS_Store
+
+# UCL coursework brief — not redistributed (public repo)
+PDF document.pdf
+brief.txt
