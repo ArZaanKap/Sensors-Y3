@@ -100,6 +100,20 @@ static uint8_t scanBus() {
   return found;
 }
 
+// Print the live state of the two I2C lines. Works even though the pins are
+// in alternate-function open-drain mode (the GPIO input path stays connected).
+static void printLineLevels() {
+  uint32_t idr = GPIOB->IDR;
+  bool sda = idr & (1u << 9);   // PB9
+  bool scl = idr & (1u << 8);   // PB8
+  Serial.print("  lines: SDA="); Serial.print(sda ? "HIGH" : "LOW ");
+  Serial.print(" SCL=");        Serial.print(scl ? "HIGH" : "LOW ");
+  if (!sda && !scl)      Serial.print("  -> both low: short to GND / no power");
+  else if (!sda || !scl) Serial.print("  -> one line stuck low: wiring / device fault");
+  else                   Serial.print("  -> both idle high but no ACK: bad contact at the device");
+  Serial.println();
+}
+
 void setup() {
   Serial.begin(115200);
   delay(200);
@@ -126,10 +140,18 @@ void loop() {
     static uint32_t nextScan = 0;
     if (millis() >= nextScan) {
       nextScan = millis() + 2000;
-      Serial.print("read failed -- rescanning (addr 0x");
+      Serial.print("read failed (addr 0x");
       if (gAddr < 0x10) Serial.print('0');
       Serial.print(gAddr, HEX);
       Serial.println("):");
+      printLineLevels();
+
+      // Try to un-stick the bus, then bring it back up and re-scan.
+      Wire.end();
+      Wire.begin(I2C_SDA, I2C_SCL);
+#if USE_INTERNAL_PULLUPS
+      enableInternalPullups();
+#endif
       if (scanBus() == 0) {
         Serial.println("  no device: check 3V3, GND, SDA(D14), SCL(D15), pull-ups, A1+A2 to GND");
       } else {
