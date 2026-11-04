@@ -5,6 +5,9 @@ demo_day.py - zero and calibrate the `airspeed` firmware against the tunnel.
     python tools/demo_day.py zero         fan OFF: re-measure the load cell's zero
     python tools/demo_day.py fit [run]    fit the newest saved run (or [run]) and send to the board
     python tools/demo_day.py cal          print the board's calibration and save it to a file
+    python tools/demo_day.py raw          download the board's raw recorder (last ~170 s of load +
+                                          rotor angle at 100 Hz) -> demoday_logs/raw_<time>.csv
+                                          (fit does this first automatically)
 
 Runs: the app always saves to Documents/Wind Tunnel Logger/logs; fit copies the run
 into demoday_logs/ in this repo (primary) and writes <run>_fit.txt there.
@@ -94,6 +97,56 @@ def do_zero(a):
             print("Now Connect the board in WindTunnelLogger.")
             return
     print("No reply from the board.")
+
+
+def dump_raw(ser):
+    """Download the board's raw recorder into demoday_logs/raw_<time>.csv.
+    PC time of each sample = PC time the header arrived - (now_us - t_us) / 1e6."""
+    ser.reset_input_buffer()
+    ser.write(b"D\n")
+    print("Downloading the board's raw recording (~20 s)...")
+    head, t_pc, rows, buf = None, None, [], b""
+    t0 = time.time()
+    while time.time() - t0 < 60:
+        chunk = ser.read(ser.in_waiting or 1)
+        if not chunk:
+            continue
+        buf += chunk
+        *lines, buf = buf.split(b"\n")
+        for raw in lines:
+            l = raw.decode("ascii", "replace").strip()
+            if l.startswith("# dump"):
+                t_pc = time.time()
+                head = dict(kv.split("=") for kv in l[2:].split()[1:])
+            elif l.startswith("# end"):
+                buf = None
+                break
+            elif head is not None and "," in l:
+                rows.append(l)
+        if buf is None:
+            break
+    if not head or buf is not None:
+        print("!! raw download failed or incomplete (old firmware without the recorder?)")
+        return None
+    n, dt, last, now = int(head["n"]), int(head["dt_us"]), int(head["last_us"]), int(head["now_us"])
+    os.makedirs(DEMO_LOGS, exist_ok=True)
+    path = os.path.join(DEMO_LOGS, time.strftime("raw_%Y%m%d_%H%M%S.csv"))
+    with open(path, "w", newline="") as f:
+        f.write(f"# board raw recorder: dt_us={dt} L0={head['L0']} (load_raw = NAU7802 counts, "
+                f"ang_raw = AS5048B 0..16383 or -1)\n")
+        f.write("timestamp_epoch,t_us,load_raw,ang_raw\n")
+        for i, l in enumerate(rows):
+            t_us = (last - (len(rows) - 1 - i) * dt) & 0xFFFFFFFF
+            ep = t_pc - ((now - t_us) & 0xFFFFFFFF) / 1e6
+            f.write(f"{ep:.4f},{t_us},{l}\n")
+    print(f"Raw recording: {len(rows)} samples ({len(rows) * dt / 1e6:.0f} s) -> {path}")
+    if len(rows) != n:
+        print(f"!! expected {n} samples, got {len(rows)}")
+    return path
+
+
+def do_raw(a):
+    dump_raw(open_board(a.port))
 
 
 def do_cal(a):
@@ -192,6 +245,8 @@ def do_fit(a):
         run = runs[-1]
     run = copy_to_demo_logs(run)
     ser = None if a.no_board else open_board(a.port)
+    if ser:
+        dump_raw(ser)          # grab the run's raw load + rotor before anything else
     cur = params(ser) if ser else {"S": 0.0509, "delay_ms": 0, "floor_mps": 0}
     k, lag, floor = fit(run, -cur.get("delay_ms", 0) / 1000)
     S = k * cur["S"]
@@ -223,12 +278,12 @@ def do_fit(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("action", choices=["zero", "fit", "cal"])
+    ap.add_argument("action", choices=["zero", "fit", "cal", "raw"])
     ap.add_argument("run", nargs="?", help="fit: a run's _aligned.csv (default: newest in the app's logs)")
     ap.add_argument("--port")
     ap.add_argument("--no-board", action="store_true", help="fit: just show the numbers")
     a = ap.parse_args()
-    {"zero": do_zero, "fit": do_fit, "cal": do_cal}[a.action](a)
+    {"zero": do_zero, "fit": do_fit, "cal": do_cal, "raw": do_raw}[a.action](a)
 
 
 if __name__ == "__main__":

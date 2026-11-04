@@ -25,6 +25,12 @@
 //   m 0|1      0 = speed only; 1 = raw "t_us,load,ang,f,v" (speed still last)
 //   w          save parameters to flash (s/n/d/l/q/r also save themselves)
 //   x          restore the built-in defaults (and save)
+//   D          dump the raw recorder (see below) as text, then resume
+//
+// Raw recorder: the last REC_N samples of raw load and rotor angle at 100 Hz
+// (~170 s) are kept in RAM all the time, so a tunnel run's raw data can be
+// downloaded afterwards ('D', tools/demo_day.py raw) while WindTunnelLogger
+// only ever sees the speed stream.
 // Parameters live in flash (EEPROM emulation), so a reset keeps the calibration.
 //
 // Wiring: NAU7802 and AS5048B on I2C1, SDA D14 (PB9), SCL D15 (PB8). The rotor
@@ -43,6 +49,8 @@ static const float DT = SAMPLE_US * 1e-6f;
 static const uint32_t STALL_MS = 100;        // no load conversion this long = bus stuck
 static const uint32_t ZERO_MS = 2000;
 static const int MAX_DELAY = 200;            // samples (1 s)
+static const int REC_N = 17000;              // raw recorder: 170 s at 100 Hz (~100 KB RAM)
+static const int REC_EVERY = 2;              // record every 2nd 200 Hz tick
 
 // ---------------------------------------------------------------- parameters
 struct Params {
@@ -200,6 +208,42 @@ static void printCalibration() {
   Serial.println("# --- end ---");
 }
 
+// ---------------------------------------------------------------- raw recorder
+static const int32_t LOAD_NONE = INT32_MIN;
+static int32_t recLoad[REC_N];
+static int16_t recAng[REC_N];
+static int recHead = 0, recCount = 0;
+static uint32_t recLastUs = 0;
+
+static void recordSample(uint32_t t, int32_t load, int16_t ang) {
+  recLoad[recHead] = load;
+  recAng[recHead] = ang;
+  recHead = (recHead + 1) % REC_N;
+  if (recCount < REC_N) recCount++;
+  recLastUs = t;
+}
+
+// Text dump, oldest first: header, one "load,ang" line per sample, footer.
+// ~15 s at 115200 baud; the speed stream pauses meanwhile.
+static void dumpRecorder() {
+  int n = recCount;
+  uint32_t lastUs = recLastUs;
+  int start = (recHead - n + REC_N) % REC_N;
+  Serial.print("# dump n="); Serial.print(n);
+  Serial.print(" dt_us="); Serial.print(SAMPLE_US * REC_EVERY);
+  Serial.print(" last_us="); Serial.print(lastUs);
+  Serial.print(" now_us="); Serial.print(micros());
+  Serial.print(" L0="); Serial.println((long)L0);
+  char b[32];
+  for (int i = 0; i < n; i++) {
+    int j = (start + i) % REC_N;
+    int len = snprintf(b, sizeof(b), "%ld,%d\n", recLoad[j] == LOAD_NONE ? -99999L : (long)recLoad[j], recAng[j]);
+    Serial.write((const uint8_t *)b, len);
+  }
+  Serial.println("# end");
+  Serial.flush();
+}
+
 // ---------------------------------------------------------------- commands
 static char cmd[40];
 static uint8_t cmdLen = 0;
@@ -212,6 +256,7 @@ static void handleCommand(char *c) {
   bool save = false;
   switch (k) {
     case 'c': printCalibration(); return;
+    case 'D': dumpRecorder(); return;
     case 'z': startZero(); Serial.println("# zeroing (fan OFF)"); return;
     case 'w': saveParams(); Serial.println("# saved"); return;
     case 'x': P = DEFAULTS; saveParams(); Serial.println("# defaults restored"); printCalibration(); return;
@@ -223,7 +268,7 @@ static void handleCommand(char *c) {
     case 'r': if (hasVal && val > 0) { P.r = val; save = true; } break;
     case 'f': if (hasVal && val >= 0 && val < 3) { P.floor = val; save = true; } break;
     case 'm': if (hasVal) { P.raw = val != 0; save = true; } break;
-    default: Serial.println("# unknown command (c z s n d l q r f m w x)"); return;
+    default: Serial.println("# unknown command (c z s n d l q r f m w x D)"); return;
   }
   if (save) {
     saveParams();
@@ -286,7 +331,11 @@ void loop() {
     lastFresh = millis();
   }
 
-  int ang = P.raw ? readAngle() : -1;
+  static uint8_t recTick = 0;
+  bool recNow = ++recTick >= REC_EVERY;
+  if (recNow) recTick = 0;
+  int ang = (P.raw || recNow) ? readAngle() : -1;
+  if (recNow) recordSample(t, isnan(load) ? LOAD_NONE : (int32_t)load, (int16_t)ang);
 
   float f = 0, v = 0;
   if (zeroing) {
