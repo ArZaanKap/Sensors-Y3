@@ -17,3 +17,6 @@ __pycache__/
 # UCL coursework brief — not redistributed (public repo)
 PDF document.pdf
 brief.txt
+
+# Course-provided logger app (63 MB, not ours to redistribute)
+WindTunnelLogger.exe
