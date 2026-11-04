@@ -29,10 +29,19 @@ Stop with Ctrl-C; all files are flushed and closed.
 """
 
 
-1) cd ~/Desktop/uni/year3/sensors/coursework1
-  ~/.platformio/penv/bin/pio run -e three_sensor_test -t upload
-2) ~/.platformio/penv/bin/python tools/log_calibration.py --sim-vdas --seconds 10 - fake ground GroundTruth
-3) 
+# 1) cd ~/Desktop/uni/year3/sensors/coursework1
+#   ~/.platformio/penv/bin/pio run -e logger3 -t upload
+# 2) ~/.platformio/penv/bin/python tools/log_calibration.py --sim-vdas --seconds 10 - fake ground GroundTruth
+# 3) plug in, make sure they are plugged in ls /dev/cu.usbmodem*
+# 4) fan off
+# 5) Close anything else using the ports, such as the VS Code/PlatformIO serial monitor or the official wind-tunnel-logger app.
+# 6) ~/.platformio/penv/bin/python tools/log_calibration.py --giga
+# 7) wait for giga to zero: - [GIGA] #HELLO: sent LEQ, C, RATE 200, ZERO - keep the fan OFF...
+# - then [GIGA] zero accepted
+# 8) If HELLO doesn't appear within a few seconds, press the reset button on the GIGA.
+# 9) Press the black RESET button on the Nucleo. 
+# 10) run no fan, steadu speeds, change speeds
+# 11) Press Ctrl-C once and let it finish.check 3 csvs 
 
 import bisect
 import csv
@@ -168,13 +177,13 @@ class GigaGroundTruth:
                     continue
                 if line.startswith("#HELLO"):
                     hello = True
-                    self._write(ser, [f"LEQ {self.LEQ_M}", f"C {self.C}"])
+                    self._write(ser, [f"LEQ {self.LEQ_M}", f"C {self.C}", "RATE 200"])
                     if not zero_sent:
                         self._write(ser, ["ZERO"])
                         zero_sent = True
-                        print("[GIGA] #HELLO: sent LEQ, C, ZERO - keep the fan OFF for ~2 s while it zeroes.")
+                        print("[GIGA] #HELLO: sent LEQ, C, RATE 200, ZERO - keep the fan OFF for ~2 s while it zeroes.")
                     else:
-                        print("[GIGA] #HELLO: sent LEQ and C.")
+                        print("[GIGA] #HELLO: sent LEQ, C and RATE 200.")
                     continue
                 if line.startswith("#EVT zero_ok"):
                     print("[GIGA] zero accepted:", line)
