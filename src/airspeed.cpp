@@ -4,13 +4,15 @@
 // WindTunnelLogger expects. All processing runs on the Nucleo:
 //
 //   NAU7802 load (320 SPS) -> minus zero L0 -> 2-state Kalman (force, force rate)
-//   -> v = S * max(f - DEAD, 0)^N -> optional output delay -> serial
+//   -> v = S * max(f - DEAD, 0)^N -> max(v, FLOOR) -> optional output delay -> serial
 //
 // Drag on the plate goes as v^2, so N = 0.5 by physics. S is the one number the
-// on-the-day calibration sets (tools/demo_cal.py).
+// on-the-day calibration sets (tools/demo_day.py). FLOOR matches the tunnel's
+// reading at rest: VDAS reports whole Pa minus a non-integer zero offset and the
+// logger takes sqrt(2|dp|/rho), so with the fan off it reads ~0.7-1.3 m/s, not 0.
 //
 // Zeroing (fan OFF, nothing touching the rig): automatically at power-up, and
-// again on the blue USER button or the 'z' command. 2 s average; output is 0
+// again on the 'z' command (tools/demo_day.py sends it) or the blue USER button. 2 s average; output is 0
 // while zeroing. Green LED (LD2): blinking = zeroing, on = zeroed and running.
 //
 // Serial commands (one per line; replies start with '#'):
@@ -19,6 +21,7 @@
 //   s <x>      scale S (m/s per count^N)          n <x>  exponent N
 //   d <x>      deadband DEAD (counts)              l <x>  output delay (ms, 0-1000)
 //   q <x>      Kalman process noise (counts^2/s^3) r <x>  measurement noise (counts^2)
+//   f <x>      output floor (m/s): output = max(v, FLOOR)
 //   m 0|1      0 = speed only; 1 = raw "t_us,load,ang,f,v" (speed still last)
 //   w          save parameters to flash (s/n/d/l/q/r also save themselves)
 //   x          restore the built-in defaults (and save)
@@ -44,14 +47,14 @@ static const int MAX_DELAY = 200;            // samples (1 s)
 // ---------------------------------------------------------------- parameters
 struct Params {
   uint32_t magic;
-  float S, N, dead, q, r;
+  float S, N, dead, q, r, floor;
   uint16_t delayMs;
   uint8_t raw;
 };
-static const uint32_t MAGIC = 0xA1E50003;
+static const uint32_t MAGIC = 0xA1E50004;
 // S from the FAN4 + anemometer fit (v = 0.0509 sqrt(dL)): a placeholder until
 // the good tunnel's VDAS sets it.
-static const Params DEFAULTS = {MAGIC, 0.0509f, 0.5f, 300.0f, 1e7f, 2.25e6f, 0, 0};
+static const Params DEFAULTS = {MAGIC, 0.0509f, 0.5f, 300.0f, 1e7f, 2.25e6f, 0.0f, 0, 0};
 static Params P = DEFAULTS;
 
 static void saveParams() {
@@ -137,7 +140,8 @@ static float kalmanStep(float z) {
 
 static float speedFrom(float f) {
   float x = f - P.dead;
-  return x > 0 ? P.S * powf(x, P.N) : 0.0f;
+  float v = x > 0 ? P.S * powf(x, P.N) : 0.0f;
+  return v > P.floor ? v : P.floor;
 }
 
 static float delayBuf[MAX_DELAY + 1];
@@ -181,13 +185,14 @@ static void printParam(const char *name, float v, int dec) {
 
 static void printCalibration() {
   Serial.println("# --- airspeed calibration ---");
-  Serial.println("# model: v = S * max(L - L0 - DEAD, 0)^N, L Kalman-filtered (2-state CV)");
+  Serial.println("# model: v = max(S * max(L - L0 - DEAD, 0)^N, FLOOR), L Kalman-filtered (2-state CV)");
   printParam("S", P.S, 6);
   printParam("N", P.N, 4);
   printParam("DEAD_counts", P.dead, 1);
   printParam("L0_counts", L0, 1);
   printParam("q_counts2_per_s3", P.q, 0);
   printParam("r_counts2", P.r, 0);
+  printParam("floor_mps", P.floor, 3);
   printParam("delay_ms", P.delayMs, 0);
   printParam("raw_mode", P.raw, 0);
   printParam("zeroed", zeroed, 0);
@@ -216,8 +221,9 @@ static void handleCommand(char *c) {
     case 'l': if (hasVal && val >= 0 && val <= 1000) { P.delayMs = (uint16_t)val; save = true; } break;
     case 'q': if (hasVal && val > 0) { P.q = val; save = true; } break;
     case 'r': if (hasVal && val > 0) { P.r = val; save = true; } break;
+    case 'f': if (hasVal && val >= 0 && val < 3) { P.floor = val; save = true; } break;
     case 'm': if (hasVal) { P.raw = val != 0; save = true; } break;
-    default: Serial.println("# unknown command (c z s n d l q r m w x)"); return;
+    default: Serial.println("# unknown command (c z s n d l q r f m w x)"); return;
   }
   if (save) {
     saveParams();
@@ -284,6 +290,7 @@ void loop() {
 
   float f = 0, v = 0;
   if (zeroing) {
+    v = P.floor;
     if (!isnan(load)) { zSum += load; zSq += (double)load * load; zN++; }
     digitalWrite(LED_BUILTIN, (millis() / 100) & 1);
     if (millis() - zeroStart >= ZERO_MS && zN > 50) {
@@ -300,6 +307,8 @@ void loop() {
   } else if (zeroed && !isnan(load)) {
     f = kalmanStep(load - L0);
     v = speedFrom(f);
+  } else {
+    v = P.floor;
   }
   v = delayed(v);
 
