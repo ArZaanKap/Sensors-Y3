@@ -28,6 +28,12 @@ If PORT is omitted, the first /dev/cu.usbmodem* device is used.
 Stop with Ctrl-C; all files are flushed and closed.
 """
 
+
+1) cd ~/Desktop/uni/year3/sensors/coursework1
+  ~/.platformio/penv/bin/pio run -e three_sensor_test -t upload
+2) ~/.platformio/penv/bin/python tools/log_calibration.py --sim-vdas --seconds 10 - fake ground GroundTruth
+3) 
+
 import bisect
 import csv
 import datetime as dt
@@ -57,6 +63,12 @@ LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 
 def find_port():
+    """Return the Nucleo's serial port, preferring the ST-Link VCP (VID 0x483)
+    so the GIGA (VID 0x2341) is never mistaken for it."""
+    import serial.tools.list_ports
+    for p in serial.tools.list_ports.comports():
+        if p.vid == 0x483:
+            return p.device
     ports = sorted(glob.glob("/dev/cu.usbmodem*"))
     if not ports:
         sys.exit("No /dev/cu.usbmodem* port found - is the Nucleo plugged in?")
@@ -112,8 +124,95 @@ class SimVdas:
         self._thread.join(1.0)
 
 
+class GigaGroundTruth:
+    """Wood tunnel's ground truth: the Arduino GIGA pitot tube (WindSpeedGiga).
+
+    Opens its serial port, sends it LEQ/C and a ZERO (fan OFF), then reports
+    each data line's corrected pressure (dp_pa) as {"t","pa","valid"}.
+    """
+
+    GIGA_HOLD, GIGA_OVR, GIGA_CLIP, GIGA_ZEROING, GIGA_RESYNC = 1, 8, 16, 64, 256
+    LEQ_M = 102.177
+    C = 1.0
+
+    def __init__(self, port, listener):
+        self.port = port
+        self._listener = listener
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _write(self, ser, cmds):
+        for c in cmds:
+            ser.write((c + "\n").encode())
+
+    def _run(self):
+        try:
+            ser = serial.Serial(self.port, 115200, timeout=0.5)
+        except Exception as e:
+            print(f"[GIGA] cannot open {self.port}: {e}")
+            return
+        hello = False
+        zero_sent = False
+        with ser:
+            while not self._stop.is_set():
+                try:
+                    raw = ser.readline()
+                except Exception:
+                    time.sleep(0.05)
+                    continue
+                if not raw:
+                    continue
+                line = raw.decode("ascii", "replace").strip()
+                if not line:
+                    continue
+                if line.startswith("#HELLO"):
+                    hello = True
+                    self._write(ser, [f"LEQ {self.LEQ_M}", f"C {self.C}"])
+                    if not zero_sent:
+                        self._write(ser, ["ZERO"])
+                        zero_sent = True
+                        print("[GIGA] #HELLO: sent LEQ, C, ZERO - keep the fan OFF for ~2 s while it zeroes.")
+                    else:
+                        print("[GIGA] #HELLO: sent LEQ and C.")
+                    continue
+                if line.startswith("#EVT zero_ok"):
+                    print("[GIGA] zero accepted:", line)
+                    continue
+                if line.startswith("#EVT zero_reject"):
+                    print("[GIGA] zero REJECTED (fan on?):", line)
+                    continue
+                if line.startswith("#"):
+                    continue
+                fields = line.split(",")
+                if len(fields) != 7:
+                    continue
+                try:
+                    flags = int(fields[6])
+                    pa = float(fields[3])       # dp_pa: zero + LEQ corrected
+                except ValueError:
+                    continue
+                if flags & (self.GIGA_HOLD | self.GIGA_ZEROING):
+                    continue
+                valid = not (flags & (self.GIGA_OVR | self.GIGA_CLIP))
+                self._listener({"t": time.time(), "pa": pa, "valid": valid, "cell": "giga"})
+
+    def close(self):
+        self._stop.set()
+        self._thread.join(1.0)
+
+
+def find_giga_port():
+    """Return the first Arduino GIGA serial port (VID 0x2341), or None."""
+    import serial.tools.list_ports
+    for p in serial.tools.list_ports.comports():
+        if p.vid == 0x2341:
+            return p.device
+    return None
+
+
 class CalibrationLogger:
-    def __init__(self, port, baud, sim_vdas=False):
+    def __init__(self, port, baud, sim_vdas=False, giga_port=None):
         self.ser = serial.Serial(port, baud, timeout=0.5)
         # Serial samples: (epoch_s, [field strings]). Header is stored separately.
         self.ser_header = None
@@ -128,6 +227,9 @@ class CalibrationLogger:
         if sim_vdas:
             self.vdas = SimVdas(self._on_vdas)
             print("SIMULATED VDAS (same fake profile as wind-tunnel-logger's bench test) - not real wind.")
+        elif giga_port:
+            self.vdas = GigaGroundTruth(giga_port, self._on_vdas)
+            print(f"GIGA pitot tube on {giga_port} - ground truth streaming (keep fan OFF for zero).")
         elif GroundTruthReader is not None:
             try:
                 # cell=1 is the tunnel's airspeed pressure cell (per the manual).
@@ -250,6 +352,7 @@ class CalibrationLogger:
 
 def main():
     sim_vdas = False
+    use_giga = False
     seconds = None
     args = []
     raw_args = sys.argv[1:]
@@ -258,6 +361,8 @@ def main():
         a = raw_args[i]
         if a == "--sim-vdas":
             sim_vdas = True
+        elif a == "--giga":
+            use_giga = True
         elif a == "--seconds":
             seconds = float(raw_args[i + 1])
             i += 1
@@ -268,7 +373,13 @@ def main():
     port = args[0] if len(args) > 0 else find_port()
     baud = int(args[1]) if len(args) > 1 else 115200
 
-    logger = CalibrationLogger(port, baud, sim_vdas=sim_vdas)
+    giga_port = None
+    if use_giga:
+        giga_port = find_giga_port()
+        if giga_port is None:
+            sys.exit("No Arduino GIGA (VID 0x2341) serial port found - is its USB-C cable plugged in?")
+
+    logger = CalibrationLogger(port, baud, sim_vdas=sim_vdas, giga_port=giga_port)
     try:
         logger.run(seconds)
     except KeyboardInterrupt:
