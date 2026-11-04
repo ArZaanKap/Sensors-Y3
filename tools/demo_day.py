@@ -6,6 +6,9 @@ demo_day.py - zero and calibrate the `airspeed` firmware against the tunnel.
     python tools/demo_day.py fit [run]    fit the newest saved run (or [run]) and send to the board
     python tools/demo_day.py cal          print the board's calibration and save it to a file
 
+Runs: the app always saves to Documents/Wind Tunnel Logger/logs; fit copies the run
+into demoday_logs/ in this repo (primary) and writes <run>_fit.txt there.
+
 Use PlatformIO's Python (it has pyserial):  ~/.platformio/penv/Scripts/python
 The board's COM port is found automatically (--port COMx to override). Only one
 program can use the port: press Disconnect in WindTunnelLogger first.
@@ -33,6 +36,9 @@ try:
 except ImportError:
     sys.exit("pyserial missing - run with  ~/.platformio/penv/Scripts/python tools/demo_day.py ...")
 
+# Primary: demoday_logs/ in this repo (fit copies each run here, plus a _fit.txt
+# record). Secondary: the app's own save folder, which it always writes to.
+DEMO_LOGS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "demoday_logs")
 LOGS = os.path.join(os.path.expanduser("~"), "Documents", "Wind Tunnel Logger", "logs")
 
 
@@ -93,8 +99,8 @@ def do_zero(a):
 def do_cal(a):
     ser = open_board(a.port)
     txt = "\n".join(command(ser, "c"))
-    path = os.path.join(os.path.dirname(LOGS), time.strftime("calibration_%Y%m%d_%H%M%S.txt"))
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(DEMO_LOGS, exist_ok=True)
+    path = os.path.join(DEMO_LOGS, time.strftime("calibration_%Y%m%d_%H%M%S.txt"))
     with open(path, "w") as f:
         f.write(txt + "\n")
     print(txt)
@@ -161,13 +167,30 @@ def fit(run, min_lag):
     return k, lag, floor
 
 
+def copy_to_demo_logs(run):
+    """Copy a run's three CSVs into demoday_logs/ (unless already there); return the copy."""
+    import shutil
+    os.makedirs(DEMO_LOGS, exist_ok=True)
+    if os.path.dirname(os.path.abspath(run)) == os.path.abspath(DEMO_LOGS):
+        return run
+    base = run[: -len("_aligned.csv")]
+    for suf in ("_aligned.csv", "_vdas.csv", "_student.csv"):
+        dst = os.path.join(DEMO_LOGS, os.path.basename(base + suf))
+        if not os.path.exists(dst):
+            shutil.copy2(base + suf, dst)
+    print(f"Copied run to {DEMO_LOGS}")
+    return os.path.join(DEMO_LOGS, os.path.basename(run))
+
+
 def do_fit(a):
     run = a.run
     if not run:
-        runs = sorted(glob.glob(os.path.join(LOGS, "*_aligned.csv")), key=os.path.getmtime)
+        runs = sorted(glob.glob(os.path.join(LOGS, "*_aligned.csv")) +
+                      glob.glob(os.path.join(DEMO_LOGS, "*_aligned.csv")), key=os.path.getmtime)
         if not runs:
-            sys.exit(f"No saved runs in {LOGS} - did you press Stop & Save in the app?")
+            sys.exit(f"No saved runs in {LOGS} or {DEMO_LOGS} - did you press Stop & Save in the app?")
         run = runs[-1]
+    run = copy_to_demo_logs(run)
     ser = None if a.no_board else open_board(a.port)
     cur = params(ser) if ser else {"S": 0.0509, "delay_ms": 0, "floor_mps": 0}
     k, lag, floor = fit(run, -cur.get("delay_ms", 0) / 1000)
@@ -179,6 +202,15 @@ def do_fit(a):
     print(f"  floor {cur.get('floor_mps', 0):6.2f} -> {F:6.2f} m/s")
     if abs(k - 1) > 0.5:
         print("  !! scale changes by over 50% - right run? right tunnel?")
+    rec = run[: -len("_aligned.csv")] + "_fit.txt"
+    with open(rec, "w") as f:
+        f.write(f"run {os.path.basename(run)}\n"
+                f"fitted {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"k {k:.5f}  lag {lag * 1000:.0f} ms  floor {F:.3f} m/s\n"
+                f"S {cur['S']:.6f} -> {S:.6f}\n"
+                f"delay_ms {cur.get('delay_ms', 0):.0f} -> {D:.0f}\n"
+                f"floor_mps {cur.get('floor_mps', 0):.3f} -> {F:.3f}\n")
+    print(f"Fit record: {rec}")
     if not ser:
         return
     if input("Send to the board? [Y/n] ").strip().lower() in ("", "y", "yes"):
