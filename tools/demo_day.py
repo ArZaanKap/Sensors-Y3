@@ -46,15 +46,20 @@ EXE_CANDIDATES = [os.path.join(HERE, "..", "WindTunnelLogger.exe"),
                   os.path.join(os.path.expanduser("~"), "Downloads", "WindTunnelLogger.exe")]
 ST_VID = 0x0483                      # ST-Link virtual COM port
 
-# mini protocol for the calibration run: (seconds from Start Logging, instruction)
+# Mini protocol for the calibration run (my design, not the course's): the
+# good tunnel's speed knob gives several levels across the 2-10 m/s range, so
+# the scale is fitted on more than 3 points; big up/down steps measure the
+# VDAS lag; fan-off at both ends measures the floor and the zero drift.
+# The fit doesn't use these timings - skip or stretch them freely.
 PROTOCOL = [
     (0, "fan OFF - keep everything still"),
-    (10, "FAN ON at full speed (all panels sealed)"),
-    (40, "REMOVE ONE panel seal"),
-    (60, "REMOVE the SECOND panel seal"),
-    (80, "PUT BOTH panels back (full speed)"),
-    (90, "FAN OFF"),
-    (115, "press STOP & SAVE in WindTunnelLogger"),
+    (10, "FAN ON, knob to MAX"),
+    (35, "knob to about 3/4"),
+    (50, "knob to about 1/2"),
+    (65, "knob to about 1/4 (slow, but fan still running)"),
+    (80, "knob back to MAX (big step)"),
+    (95, "FAN OFF"),
+    (120, "press STOP & SAVE in WindTunnelLogger"),
 ]
 
 
