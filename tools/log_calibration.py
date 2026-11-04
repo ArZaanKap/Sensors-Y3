@@ -199,12 +199,13 @@ class GigaGroundTruth:
                 try:
                     flags = int(fields[6])
                     pa = float(fields[3])       # dp_pa: zero + LEQ corrected
+                    v = float(fields[4])        # v_mps: the GIGA's own airspeed
                 except ValueError:
                     continue
                 if flags & (self.GIGA_HOLD | self.GIGA_ZEROING):
                     continue
                 valid = not (flags & (self.GIGA_OVR | self.GIGA_CLIP))
-                self._listener({"t": time.time(), "pa": pa, "valid": valid, "cell": "giga"})
+                self._listener({"t": time.time(), "pa": pa, "v": v, "valid": valid, "cell": "giga"})
 
     def close(self):
         self._stop.set()
@@ -252,7 +253,7 @@ class CalibrationLogger:
         """Called on the VDAS reader thread; just record valid pressure readings."""
         if r.get("valid"):
             with self.vdas_lock:
-                self.vdas_samples.append((r["t"], r["pa"]))
+                self.vdas_samples.append((r["t"], r["pa"], r.get("v", "")))
 
     def _handle_serial_line(self, raw, epoch):
         line = raw.decode("ascii", "replace").strip()
@@ -353,18 +354,18 @@ class CalibrationLogger:
         # 2. Ground truth stream.
         with open(base + "_vdas.csv", "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["timestamp_epoch", "pressure_pa"])
-            for epoch, pa in vdas:
-                w.writerow([f"{epoch:.6f}", pa])
+            w.writerow(["timestamp_epoch", "pressure_pa", "giga_v_mps"])
+            for epoch, pa, v in vdas:
+                w.writerow([f"{epoch:.6f}", pa, v])
 
         # 3. Aligned: each VDAS reading + nearest serial sample within tolerance.
         ser_epochs = [s[0] for s in samples]
-        aligned_cols = ["vdas_timestamp_epoch", "pressure_pa", "serial_timestamp_epoch"] + header
+        aligned_cols = ["vdas_timestamp_epoch", "pressure_pa", "giga_v_mps", "serial_timestamp_epoch"] + header
         with open(base + "_aligned.csv", "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(aligned_cols)
             paired = 0
-            for v_epoch, pa in vdas:
+            for v_epoch, pa, v in vdas:
                 i = bisect.bisect_left(ser_epochs, v_epoch)
                 best = None
                 for j in (i - 1, i):
@@ -374,7 +375,7 @@ class CalibrationLogger:
                 if best is None:
                     continue
                 s_epoch, fields = samples[best]
-                w.writerow([f"{v_epoch:.6f}", pa, f"{s_epoch:.6f}"] + fields)
+                w.writerow([f"{v_epoch:.6f}", pa, v, f"{s_epoch:.6f}"] + fields)
                 paired += 1
 
         print(f"\nWrote {len(samples)} board samples and {len(vdas)} ground-truth readings "
