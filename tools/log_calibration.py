@@ -33,7 +33,7 @@ Stop with Ctrl-C; all files are flushed and closed.
 #   ~/.platformio/penv/bin/pio run -e logger3 -t upload
 # 2) ~/.platformio/penv/bin/python tools/log_calibration.py --sim-vdas --seconds 10 - fake ground GroundTruth
 # 3) plug in, make sure they are plugged in ls /dev/cu.usbmodem*
-# 4) fan off
+# 4) fan off. n
 # 5) Close anything else using the ports, such as the VS Code/PlatformIO serial monitor or the official wind-tunnel-logger app.
 # 6) ~/.platformio/penv/bin/python tools/log_calibration.py --giga
 # 7) wait for giga to zero: - [GIGA] #HELLO: sent LEQ, C, RATE 200, ZERO - keep the fan OFF...
@@ -258,11 +258,20 @@ class CalibrationLogger:
         line = raw.decode("ascii", "replace").strip()
         if not line:
             return
+        if line.startswith("#"):
+            # Firmware status/comment line (e.g. "# i2c bus reset 3"): show, don't parse.
+            print(f"\n[board] {line}", flush=True)
+            return
         fields = line.split(",")
         if is_data_line(fields):
             with self.ser_lock:
-                if self.ser_header is None:
+                auto = self.ser_header is None or self.ser_header[0] == "ch0"
+                if auto and (self.ser_header is None or len(fields) != len(self.ser_header)):
+                    # No firmware header seen: guess one. If the first line was a
+                    # cut-off partial line, re-guess from the next full one and
+                    # drop the samples that don't match it.
                     self.ser_header = [f"ch{i}" for i in range(len(fields))]
+                    self.ser_samples = [s for s in self.ser_samples if len(s[1]) == len(fields)]
                 if len(fields) == len(self.ser_header):
                     self.ser_samples.append((epoch, fields))
         else:
@@ -279,6 +288,22 @@ class CalibrationLogger:
             try:
                 raw = self.ser.readline()
             except Exception as e:
+                if "not configured" in str(e) or not os.path.exists(self.ser.port):
+                    # The board fell off USB: wait for it and reopen the port.
+                    print(f"\n[board disconnected - plug it back in, waiting...]", flush=True)
+                    try:
+                        self.ser.close()
+                    except Exception:
+                        pass
+                    while seconds is None or time.time() - t0 < seconds:
+                        time.sleep(1.0)
+                        try:
+                            self.ser.open()
+                            print("[board reconnected - recording again]", flush=True)
+                            break
+                        except Exception:
+                            continue
+                    continue
                 # macOS USB-CDC can throw this spuriously ("device reports
                 # readiness to read but returned no data"): keep trying.
                 print(f"\n[serial read error, continuing: {e}]", flush=True)
