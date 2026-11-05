@@ -20,7 +20,7 @@ import bisect, csv, json, math, os, random, re, subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 LOGS, PLOTS = os.path.join(ROOT, "demoday_logs"), os.path.join(ROOT, "plots")
-RUN, RAW = os.path.join(LOGS, "run_20261105_092221"), os.path.join(LOGS, "raw_20261105_092538.csv")
+RUN, RAW = os.path.join(LOGS, "calibration_run", "run_20261105_092221"), os.path.join(LOGS, "calibration_run", "raw_20261105_092538.csv")
 OUT = os.path.join(PLOTS, "2026-11-05_good-tunnel_12_exponent-robustness")
 
 Q, R, DEAD = 1e7, 2.25e6 / 2, 300.0            # firmware q; r halved for the 100 Hz log

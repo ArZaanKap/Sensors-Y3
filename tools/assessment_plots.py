@@ -16,7 +16,7 @@ import csv, math, os, re, subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 RUN = os.path.join(ROOT, "demoday_logs", "team2", "team2_log1_20261105_122331")
-CAL = os.path.join(ROOT, "demoday_logs", "run_20261105_092221")
+CAL = os.path.join(ROOT, "demoday_logs", "calibration_run", "run_20261105_092221")
 OUT = os.path.join(ROOT, "assessment_plots")
 S1, FL = 0.036196, 1.003
 

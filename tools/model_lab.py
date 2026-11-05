@@ -28,8 +28,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 LOGS = os.path.join(ROOT, "demoday_logs")
 PLOTS = os.path.join(ROOT, "plots")
-RUN = os.path.join(LOGS, "run_20261105_092221")
-RAW = os.path.join(LOGS, "raw_20261105_092538.csv")
+RUN = os.path.join(LOGS, "calibration_run", "run_20261105_092221")
+RAW = os.path.join(LOGS, "calibration_run", "raw_20261105_092538.csv")
 PREFIX = "2026-11-05_good-tunnel"
 
 # ------------------------------------------------------------------ data

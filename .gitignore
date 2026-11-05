@@ -20,3 +20,6 @@ brief.txt
 
 # Course-provided logger app (63 MB, not ours to redistribute)
 WindTunnelLogger.exe
+
+# Report source (kept local)
+report.tex
