@@ -1,0 +1,239 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Is the fitted exponent real? – good tunnel 2026-11-05</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --ink: #52514e; --band: #cde2fb;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --ink: #c3c2b7; --band: #184f95;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --ink: #c3c2b7; --band: #184f95;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root { background: var(--page); color: var(--text-primary); min-height: 100vh;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 28px 20px 40px; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+h2 { font-size: 17px; font-weight: 600; margin: 26px 0 6px; }
+h3 { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: var(--text-secondary); }
+.sub, .about { color: var(--text-secondary); margin: 0 0 14px; max-width: 920px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 10px; margin-bottom: 12px; position: relative; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 12px 0; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.tile .k { color: var(--text-secondary); font-size: 12px; } .tile .v { font-size: 22px; font-weight: 600; } .tile .n { color: var(--muted); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--text-secondary); margin: -2px 0 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg .lbl { fill: var(--text-secondary); font-size: 12px; } svg .val { fill: var(--text-primary); font-size: 12px; }
+.grid line { stroke: var(--grid); stroke-width: 1; } .base { stroke: var(--axis); stroke-width: 1; }
+.tip { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); display: none; white-space: nowrap; z-index: 5; }
+.note { color: var(--text-secondary); font-size: 12.5px; margin: 6px 0 0; max-width: 920px; }
+ul.rules { color: var(--text-secondary); margin: 4px 0 10px; padding-left: 20px; max-width: 920px; } ul.rules li { margin-bottom: 3px; }
+.verdict { border-left: 3px solid var(--series-1); padding: 8px 14px; background: var(--surface-1); border-radius: 0 10px 10px 0; margin: 10px 0 4px; max-width: 920px; }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap" id="wrap">
+  <h1>Is the fitted exponent real, or overfitting?</h1>
+  <p class="sub">Good tunnel, 5 Nov 2026. Model: v = k·(F − 300)<sup>N</sup>. The board uses N = ½. Fitting on the whole run gave N = 0.54. Here N is refitted on many different parts of the run and scored only on parts it never saw.</p>
+  <div class="card">
+    <h3>How leakage is prevented</h3>
+    <ul class="rules" id="rules"></ul>
+  </div>
+  <div class="tiles" id="tiles"></div>
+  <div class="verdict" id="verdict"></div>
+  <h2>1. Does the same N come out of different parts of the run?</h2>
+  <div class="card" id="c1"></div>
+  <h2>2. Scored on blocks the fit never saw</h2>
+  <div class="card" id="c2"></div>
+  <h2>3. Wrong exponent, or the zero drifting? Check against the zero measured after the run</h2>
+  <div class="card" id="c3"></div>
+  <h2>4. Same speed, start vs end of the run</h2>
+  <div class="card" id="c4"></div>
+</div></div>
+<script>
+const D = /*DATA*/null;
+const P = new URLSearchParams(location.hash.slice(1));
+if (P.get("theme")) document.documentElement.dataset.theme = P.get("theme");
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, a = {}, p) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); if (p) p.appendChild(e); return e; };
+const h = (tag, cls, html, p) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; if (p) p.appendChild(e); return e; };
+const ticks = (lo, hi, n) => { const st = Math.pow(10, Math.floor(Math.log10((hi - lo) / n))); const m = [1, 2, 5, 10].find(s => (hi - lo) / (s * st) <= n) * st; const o = []; for (let v = Math.ceil(lo / m - 1e-9) * m; v <= hi + 1e-9; v += m) o.push(+v.toFixed(6)); return o; };
+const tipFor = card => h("div", "tip", null, card);
+function showTip(tip, card, svg, W, H, x, y, html) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const r = svg.getBoundingClientRect(), c = card.getBoundingClientRect();
+  let px = r.left - c.left + x * r.width / W + 12, py = r.top - c.top + y * r.height / H - 12;
+  if (px + tip.offsetWidth > c.width - 6) px -= tip.offsetWidth + 24;
+  tip.style.left = px + "px"; tip.style.top = Math.max(4, py) + "px";
+}
+const C = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
+
+document.getElementById("rules").innerHTML = `
+  <li>Fitted on the training part only, every time: exponent N, scale k, output delay D (and the drift rate, where a model has one).</li>
+  <li>Fixed beforehand, never fitted on scored data: the zero (taken before the run), the Kalman filter settings (lab values), the 300-count dead-band, and the floor (${D.floor.toFixed(2)} m/s, from the fan-off before the scored part).</li>
+  <li>Test parts are whole blocks of time, never random points: tunnel readings 250 ms apart are almost identical, so a random split would leak.</li>
+  <li>A ${D.buffer.toFixed(0)} s gap either side of every test block is dropped from training (covers the output delay and the filter's memory).</li>`;
+
+const lobo = D.rows.filter(r => r.group === "lobo").map(r => r.N);
+document.getElementById("tiles").innerHTML = `
+  <div class="tile"><div class="k">N, fitted with one block left out (5 fits)</div><div class="v">${Math.min(...lobo).toFixed(3)}–${Math.max(...lobo).toFixed(3)}</div><div class="n">board uses 0.500</div></div>
+  <div class="tile"><div class="k">Block bootstrap, ${D.boot.reps} resamples</div><div class="v">${D.boot.lo.toFixed(3)}–${D.boot.hi.toFixed(3)}</div><div class="n">95% range; ${(D.boot.share_above * 100).toFixed(0)}% of resamples above 0.5</div></div>
+  <div class="tile"><div class="k">Error on unseen blocks (pooled MSE)</div><div class="v">${D.pooled.half.toFixed(3)} → ${D.pooled.fit.toFixed(3)}</div><div class="n">N = ½ → N fitted</div></div>
+  <div class="tile"><div class="k">Fitting N and drift together</div><div class="v">N = ${D.all_fit.both_N.toFixed(2)}</div><div class="n">plus ${D.all_fit.both_c.toFixed(0)} counts/s of zero drift</div></div>`;
+document.getElementById("verdict").innerHTML = `<b>Verdict: not proven.</b> Fitted N comes out at 0.52–0.55 consistently and beats ½ on unseen blocks, ` +
+  `but chart 4 shows the run reads higher in its second half than its first <i>at the same speed</i>. An exponent can't do that; something changed with time ` +
+  `(load-cell creep, or the tunnel's own zero shifting by under 1 Pa). In this run the slow speeds mostly come late, so the fitted N partly absorbs that time effect. ` +
+  `The earliest block alone gives exactly N = 0.50. <b>Keep N = ½ on the board</b>; test N on the assessment run's raw data, which is truly independent.`;
+
+/* ---- chart 1: N by subset (dot plot) */
+(function () {
+  const card = document.getElementById("c1");
+  h("h3", null, "Fitted N from each part of the run (dot) · shaded band = bootstrap 95% range · dashed line = ½ (board)", card);
+  const rows = D.rows, W = 1040, rowH = 26, top = 8, H = rows.length * rowH + top + 40, L = 330, x0 = 0.45, x1 = 0.60;
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "fitted exponent by subset"}, card);
+  const X = v => L + (v - x0) / (x1 - x0) * (W - L - 90);
+  const yb = H - 34;
+  el("rect", {x: X(D.boot.lo), y: top, width: X(D.boot.hi) - X(D.boot.lo), height: yb - top, fill: "var(--band)", opacity: .6}, svg);
+  const g = el("g", {class: "grid"}, svg);
+  for (const t of ticks(x0, x1, 8)) { el("line", {x1: X(t), x2: X(t), y1: top, y2: yb}, g); el("text", {x: X(t), y: yb + 16, "text-anchor": "middle"}, svg).textContent = t.toFixed(2); }
+  el("line", {x1: X(0.5), x2: X(0.5), y1: top, y2: yb, stroke: "var(--ink)", "stroke-width": 1.5, "stroke-dasharray": "5 4"}, svg);
+  el("text", {class: "lbl", x: (L + W - 90) / 2, y: H - 2, "text-anchor": "middle"}, svg).textContent = "exponent N";
+  let prev = null;
+  rows.forEach((r, i) => {
+    const y = top + i * rowH + rowH / 2;
+    if (prev && prev !== r.group) el("line", {x1: 10, x2: W - 10, y1: y - rowH / 2, y2: y - rowH / 2, stroke: "var(--grid)"}, svg);
+    prev = r.group;
+    el("text", {class: "val", x: L - 14, y: y + 4, "text-anchor": "end"}, svg).textContent = r.label + (r.range ? `  (${r.range})` : "");
+    el("circle", {cx: X(r.N), cy: y, r: 5, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2}, svg);
+    el("text", {class: "val", x: X(r.N) + 10, y: y + 4}, svg).textContent = r.N.toFixed(3);
+  });
+  h("p", "note", "All of the scored run, every leave-one-block-out fit and both halves land at 0.52–0.55. Single 17 s blocks are noisier, since a short stretch covers a narrow speed range. " +
+    "Block 1 alone (the start of the run, ramping up) gives exactly 0.500: the one result that doesn't fit the pattern.", card);
+})();
+
+/* ---- chart 2: test MSE per left-out block, 4 models (grouped bars) */
+(function () {
+  const card = document.getElementById("c2");
+  h("h3", null, "Error (MSE) on each left-out block, model trained on the other blocks only (lower is better)", card);
+  const models = [["mse_half", "N = ½ (board now)"], ["mse_fit", "N fitted"], ["mse_drift", "N = ½ + zero drift"], ["mse_both", "N + drift both fitted"]];
+  h("div", "legend", models.map((m, i) => `<span><i style="background:${C[i]}"></i>${m[1]}</span>`).join(""), card);
+  const groups = D.folds.map(f => ({label: `Block ${f.block}: ${f.from}–${f.to} s, ${f.range}`, vals: models.map(m => f[m[0]])}))
+    .concat([{label: "All blocks pooled", vals: [D.pooled.half, D.pooled.fit, D.pooled.drift, D.pooled.both]}]);
+  const W = 1040, bh = 13, gap = 2, gH = models.length * (bh + gap) + 16, L = 330, H = groups.length * gH + 36;
+  const max = Math.max(...groups.flatMap(g => g.vals)) * 1.15;
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "test MSE by block"}, card);
+  const X = v => L + v / max * (W - L - 70);
+  const gg = el("g", {class: "grid"}, svg);
+  for (const t of ticks(0, max, 6)) { el("line", {x1: X(t), x2: X(t), y1: 0, y2: H - 30}, gg); el("text", {x: X(t), y: H - 12, "text-anchor": "middle"}, svg).textContent = t; }
+  const tip = tipFor(card);
+  groups.forEach((gr, gi) => {
+    const y0 = gi * gH + 6;
+    el("text", {class: "val", x: L - 14, y: y0 + (models.length * (bh + gap)) / 2 + 4, "text-anchor": "end", "font-weight": gi === groups.length - 1 ? 600 : 400}, svg).textContent = gr.label;
+    gr.vals.forEach((v, i) => {
+      const y = y0 + i * (bh + gap), w = Math.max(X(v) - X(0), 5);
+      const bar = el("path", {d: `M${X(0)},${y} h${w - 4} a4,4 0 0 1 4,4 v${bh - 8} a4,4 0 0 1 -4,4 h${-(w - 4)} Z`, fill: C[i]}, svg);
+      el("text", {x: X(v) + 6, y: y + bh - 3}, svg).textContent = v.toFixed(3);
+      const hit = el("rect", {x: X(0), y: y - 1, width: W - X(0) - 10, height: bh + gap, fill: "transparent"}, svg);
+      hit.addEventListener("mousemove", () => showTip(tip, card, svg, W, H, X(v), y, `<b>${gr.label}</b><br>${models[i][1]}: MSE ${v.toFixed(4)}`));
+      hit.addEventListener("mouseleave", () => tip.style.display = "none");
+    });
+  });
+  el("line", {class: "base", x1: X(0), x2: X(0), y1: 0, y2: H - 30}, svg);
+  h("p", "note", "Fitting N cuts the error on blocks 2, 4 and 5 and ties on block 3, but doubles it on block 1. N = ½ plus a drift term does about as well overall. " +
+    "On unseen data alone, this run can't fully separate the two explanations; chart 3 can.", card);
+})();
+
+/* ---- chart 3: measured zero after the run vs what each explanation needs */
+(function () {
+  const card = document.getElementById("c3");
+  h("h3", null, "Force above the zero once the fan was off (measured) vs the drift each explanation needs by the end of the run", card);
+  h("div", "legend", `<span><i style="background:var(--ink)"></i>Measured after the run (upper bound: air may still be coasting)</span>` +
+    `<span><i style="background:${C[2]}"></i>Needed if drift alone (N = ½)</span><span><i style="background:${C[3]}"></i>Needed by the joint fit (N = ${D.all_fit.both_N.toFixed(2)})</span>`, card);
+  const ra = D.rest_after, W = 1040, H = 300, m = {l: 60, r: 220, t: 10, b: 36};
+  const xa = ra[0][0] - 1, xb = ra[ra.length - 1][0] + 1, ymax = Math.ceil(Math.max(D.needed.drift, ...ra.map(p => p[1])) * 1.15 / 500) * 500;
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "zero offset after run"}, card);
+  const X = v => m.l + (v - xa) / (xb - xa) * (W - m.l - m.r), Y = v => H - m.b - v / ymax * (H - m.t - m.b);
+  const g = el("g", {class: "grid"}, svg);
+  for (const t of ticks(0, ymax, 5)) { el("line", {x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t)}, g); el("text", {x: m.l - 8, y: Y(t) + 4, "text-anchor": "end"}, svg).textContent = t; }
+  for (const t of ticks(xa, xb, 10)) el("text", {x: X(t), y: H - m.b + 16, "text-anchor": "middle"}, svg).textContent = t;
+  el("line", {class: "base", x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0)}, svg);
+  el("text", {class: "lbl", x: (m.l + W - m.r) / 2, y: H - 2, "text-anchor": "middle"}, svg).textContent = "time since run start (s)";
+  el("text", {class: "lbl", x: 14, y: (m.t + H - m.b) / 2, "text-anchor": "middle", transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})`}, svg).textContent = "force above zero (counts)";
+  for (const [v, c, lab] of [[D.needed.drift, C[2], `drift alone needs ${Math.round(D.needed.drift)}`], [D.needed.both, C[3], `joint fit needs ${Math.round(D.needed.both)}`]]) {
+    el("line", {x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: c, "stroke-width": 2, "stroke-dasharray": "6 4"}, svg);
+    el("text", {class: "val", x: W - m.r + 8, y: Y(v) + 4}, svg).textContent = lab;
+  }
+  el("path", {d: ra.map((p, i) => `${i ? "L" : "M"}${X(p[0])},${Y(p[1])}`).join(""), fill: "none", stroke: "var(--ink)", "stroke-width": 2}, svg);
+  const tip = tipFor(card);
+  for (const p of ra) {
+    el("circle", {cx: X(p[0]), cy: Y(p[1]), r: 5, fill: "var(--ink)", stroke: "var(--surface-1)", "stroke-width": 2}, svg);
+    const hit = el("circle", {cx: X(p[0]), cy: Y(p[1]), r: 14, fill: "transparent"}, svg);
+    hit.addEventListener("mousemove", () => showTip(tip, card, svg, W, H, X(p[0]), Y(p[1]), `t = ${p[0]} s<br>${p[1]} counts above zero`));
+    hit.addEventListener("mouseleave", () => tip.style.display = "none");
+  }
+  h("p", "note", `Once the fan stopped, the plate read about ${Math.round(ra.slice(1, -1).reduce((a, p) => a + p[1], 0) / Math.max(ra.length - 2, 1))} counts above the zero taken before the run ` +
+    `(the last point jumps as the rig was being unmounted). That's the most drift there can have been. "Drift alone" needs about 3× more, so it's ruled out. ` +
+    `The joint fit (N ≈ ${D.all_fit.both_N.toFixed(2)} plus steady drift) needs about what was measured, but chart 4 shows the time effect is bigger than a steady zero drift of that size, so this isn't settled either.`, card);
+})();
+/* ---- chart 4: early vs late error at the same tunnel speed, for N = 1/2 and N = 0.53 */
+(function () {
+  const card = document.getElementById("c4");
+  h("h3", null, `Mean error (model − tunnel) per 1 m/s speed band: first half of the run (before ${D.early_late.split} s) vs second half`, card);
+  h("div", "legend", `<span><i style="background:${C[0]}"></i>Early (first half)</span><span><i style="background:${C[1]}"></i>Late (second half)</span>`, card);
+  const panels = [["N = ½ (board)", D.early_late.half], ["N = 0.53", D.early_late.fit]];
+  const W = 1040, H = 300, pw = W / 2, m = {l: 56, r: 20, t: 26, b: 40};
+  const all = panels.flatMap(p => p[1].flatMap(r => [r.early, r.late]));
+  const lim = Math.ceil(Math.max(0.3, ...all.map(Math.abs)) * 10) / 10;
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "early vs late error by speed"}, card);
+  const tip = tipFor(card);
+  panels.forEach(([title, rows], pi) => {
+    const ox = pi * pw, n = rows.length;
+    const X = i => ox + m.l + (i + 0.5) / n * (pw - m.l - m.r), Y = v => m.t + (lim - v) / (2 * lim) * (H - m.t - m.b);
+    el("text", {class: "val", x: ox + m.l, y: 14, "font-weight": 600}, svg).textContent = title;
+    const g = el("g", {class: "grid"}, svg);
+    for (const t of ticks(-lim, lim, 6)) { el("line", {x1: ox + m.l, x2: ox + pw - m.r, y1: Y(t), y2: Y(t)}, g); el("text", {x: ox + m.l - 8, y: Y(t) + 4, "text-anchor": "end"}, svg).textContent = t.toFixed(1); }
+    el("line", {class: "base", x1: ox + m.l, x2: ox + pw - m.r, y1: Y(0), y2: Y(0)}, svg);
+    el("text", {class: "lbl", x: ox + (m.l + pw - m.r) / 2, y: H - 4, "text-anchor": "middle"}, svg).textContent = "tunnel speed band (m/s)";
+    if (pi === 0) el("text", {class: "lbl", x: 14, y: (m.t + H - m.b) / 2, "text-anchor": "middle", transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})`}, svg).textContent = "mean error (m/s)";
+    rows.forEach((r, i) => {
+      el("text", {x: X(i), y: H - m.b + 16, "text-anchor": "middle"}, svg).textContent = r.band;
+      el("line", {x1: X(i), x2: X(i), y1: Y(r.early), y2: Y(r.late), stroke: "var(--axis)", "stroke-width": 2}, svg);
+      for (const [v, c, lab, cnt] of [[r.early, C[0], "early", r.ne], [r.late, C[1], "late", r.nl]]) {
+        el("circle", {cx: X(i), cy: Y(v), r: Math.min(8, 3 + Math.sqrt(cnt)), fill: c, stroke: "var(--surface-1)", "stroke-width": 2}, svg);
+        const hit = el("circle", {cx: X(i), cy: Y(v), r: 12, fill: "transparent"}, svg);
+        hit.addEventListener("mousemove", () => showTip(tip, card, svg, W, H, X(i), Y(v), `<b>${title}, ${r.band} m/s</b><br>${lab}: ${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)} m/s (${cnt} readings)`));
+        hit.addEventListener("mouseleave", () => tip.style.display = "none");
+      }
+    });
+  });
+  h("p", "note", "Dot size = number of readings. In every band the late dot is level with or above the early one, by up to about 0.3 m/s, and changing N from ½ to 0.53 moves both dots together without closing the gap. " +
+    "That gap is a time effect, not an exponent effect. It's about what a 1,000–1,500-count force offset would do, more than the ~550 counts measured after the run, so it may be load-cell creep that partly recovers when unloaded, or the tunnel's own zero moving by under 1 Pa. " +
+    "Early readings at 3–6 m/s are few and all on the first ramp-up, so the low-speed gaps are the least certain.", card);
+})();
+document.body.dataset.h = Math.ceil(document.documentElement.scrollHeight);
+</script>
+</body>
+</html>

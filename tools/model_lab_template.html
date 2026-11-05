@@ -1,0 +1,344 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Airspeed model comparison – good tunnel 2026-11-05</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --gt: #52514e; --raw: #c3c2b7;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --gt: #c3c2b7; --raw: #52514e;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --gt: #c3c2b7; --raw: #52514e;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root { background: var(--page); color: var(--text-primary); min-height: 100vh;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 28px 20px 40px; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+h2 { font-size: 18px; font-weight: 600; margin: 0 0 2px; }
+h3 { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: var(--text-secondary); }
+.sub { color: var(--text-secondary); margin: 0 0 22px; max-width: 900px; }
+section { margin-bottom: 44px; }
+.formula { font-family: ui-monospace, Consolas, monospace; font-size: 13px; color: var(--text-secondary); margin: 2px 0 4px; }
+.about { color: var(--text-secondary); margin: 0 0 14px; max-width: 900px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.tile .k { color: var(--text-secondary); font-size: 12px; }
+.tile .v { font-size: 24px; font-weight: 600; }
+.tile .n { color: var(--muted); font-size: 12px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 10px; margin-bottom: 12px; position: relative; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 760px) { .row2 { grid-template-columns: 1fr; } }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--text-secondary); margin: -2px 0 6px; }
+.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; border-radius: 1px; }
+.legend i.dot { width: 8px; height: 8px; border-radius: 50%; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg .lbl { fill: var(--text-secondary); font-size: 12px; }
+svg .val { fill: var(--text-primary); font-size: 12px; }
+.grid line { stroke: var(--grid); stroke-width: 1; }
+.base { stroke: var(--axis); stroke-width: 1; }
+.tip { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); display: none;
+  white-space: nowrap; font-variant-numeric: tabular-nums; z-index: 5; }
+.tip b { font-weight: 600; }
+.tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--grid); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-secondary); font-weight: 600; }
+.sw2 { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+.note { color: var(--text-secondary); font-size: 12.5px; margin: 6px 0 0; max-width: 900px; }
+ol.steps { margin: 4px 0 14px; padding-left: 20px; color: var(--text-secondary); max-width: 900px; }
+ol.steps li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap" id="wrap">
+  <header id="hdr">
+    <h1>Airspeed model comparison: good tunnel, 5 Nov 2026</h1>
+    <p class="sub" id="sub"></p>
+  </header>
+</div></div>
+<script>
+const DATA = /*DATA*/null;
+const P = new URLSearchParams(location.hash.slice(1));
+if (P.get("theme")) document.documentElement.dataset.theme = P.get("theme");
+const ONLY = P.get("only");
+const NS = "http://www.w3.org/2000/svg";
+const COLORS = [1, 2, 3, 4, 5, 6, 7, 8].map(i => `var(--series-${i})`);
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (parent) parent.appendChild(e); return e; };
+const h = (tag, cls, html, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
+const ticks = (lo, hi, n) => { const step = Math.pow(10, Math.floor(Math.log10((hi - lo) / n))); const m = [1, 2, 5, 10].find(s => (hi - lo) / (s * step) <= n) * step; const out = []; for (let v = Math.ceil(lo / m - 1e-9) * m; v <= hi + 1e-9; v += m) out.push(+v.toFixed(6)); return out; };
+const fmt = (v, d = 2) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
+const tEnd = Math.ceil(DATA.gt[DATA.gt.length - 1][0]);
+
+function frame(card, W, H, x0, x1, y0, y1, xLabel, yLabel, m = {l: 46, r: 14, t: 8, b: 36}) {
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": yLabel + " vs " + xLabel}, card);
+  const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+  const Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  const g = el("g", {class: "grid"}, svg);
+  for (const t of ticks(y0, y1, 5)) { el("line", {x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t)}, g); el("text", {x: m.l - 8, y: Y(t) + 4, "text-anchor": "end"}, svg).textContent = t; }
+  for (const t of ticks(x0, x1, 10)) el("text", {x: X(t), y: H - m.b + 18, "text-anchor": "middle"}, svg).textContent = t;
+  el("line", {class: "base", x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b}, svg);
+  el("text", {class: "lbl", x: (m.l + W - m.r) / 2, y: H - 2, "text-anchor": "middle"}, svg).textContent = xLabel;
+  const cy = m.t + (H - m.t - m.b) / 2;
+  el("text", {class: "lbl", x: 12, y: cy, "text-anchor": "middle", transform: `rotate(-90 12 ${cy})`}, svg).textContent = yLabel;
+  return {svg, X, Y, m, W, H, x0, x1};
+}
+const pathD = (pts, X, Y, step) => pts.map((p, i) => i === 0 ? `M${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}` :
+  (step ? `H${X(p[0]).toFixed(1)}V${Y(p[1]).toFixed(1)}` : `L${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`)).join("");
+const svgPoint = (svg, ev) => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); };
+const near = (arr, t) => { let lo = 0, hi = arr.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; arr[mid][0] < t ? lo = mid : hi = mid; } return Math.abs(arr[lo][0] - t) < Math.abs(arr[hi][0] - t) ? arr[lo] : arr[hi]; };
+const stepAt = (arr, t) => { if (t < arr[0][0]) return null; let lo = 0, hi = arr.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; arr[mid][0] <= t ? lo = mid : hi = mid; } return arr[t >= arr[hi][0] ? hi : lo]; };
+function placeTip(tip, card, f, x, y, html) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const r = f.svg.getBoundingClientRect(), c = card.getBoundingClientRect();
+  let px = r.left - c.left + x * r.width / f.W + 14, py = r.top - c.top + y * r.height / f.H - 10;
+  if (px + tip.offsetWidth > c.width - 6) px -= tip.offsetWidth + 28;
+  tip.style.left = px + "px"; tip.style.top = Math.max(4, py) + "px";
+}
+function hitRect(f) { return el("rect", {x: f.m.l, y: f.m.t, width: f.W - f.m.l - f.m.r, height: f.H - f.m.t - f.m.b, fill: "transparent"}, f.svg); }
+
+/* crosshair over several line/step series: [{name, pts, color, step}] */
+function crosshair(card, f, list, header) {
+  const tip = h("div", "tip", null, card);
+  const cross = el("line", {y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--axis)", "stroke-width": 1, display: "none"}, f.svg);
+  const dots = list.map(s => el("circle", {r: 4, fill: s.color, stroke: "var(--surface-1)", "stroke-width": 2, display: "none"}, f.svg));
+  const hit = hitRect(f);
+  hit.addEventListener("mousemove", ev => {
+    const p = svgPoint(f.svg, ev);
+    const t = f.x0 + (p.x - f.m.l) / (f.W - f.m.l - f.m.r) * (f.x1 - f.x0);
+    cross.setAttribute("x1", f.X(t)); cross.setAttribute("x2", f.X(t)); cross.removeAttribute("display");
+    let rows = `<b>${header(t)}</b>`, yy = f.H / 2;
+    list.forEach((s, i) => {
+      const q = s.step ? stepAt(s.pts, t) : near(s.pts, t);
+      if (!q) { dots[i].setAttribute("display", "none"); return; }
+      dots[i].setAttribute("cx", f.X(s.step ? t : q[0])); dots[i].setAttribute("cy", f.Y(q[1])); dots[i].removeAttribute("display");
+      rows += `<br><span class="sw" style="background:${s.color}"></span>${s.name} ${q[1].toFixed(2)} m/s`; yy = f.Y(q[1]);
+    });
+    placeTip(tip, card, f, f.X(t), yy, rows);
+  });
+  hit.addEventListener("mouseleave", () => { tip.style.display = "none"; cross.setAttribute("display", "none"); dots.forEach(d => d.setAttribute("display", "none")); });
+}
+function hoverDots(card, f, pts, xy, html, color) {
+  const tip = h("div", "tip", null, card);
+  const ring = el("circle", {r: 6, fill: color, stroke: "var(--surface-1)", "stroke-width": 2, display: "none"}, f.svg);
+  const hit = hitRect(f);
+  hit.addEventListener("mousemove", ev => {
+    const p = svgPoint(f.svg, ev); let best = null, bd = 1e9;
+    for (const q of pts) { const [x, y] = xy(q); const d = (x - p.x) ** 2 + (y - p.y) ** 2; if (d < bd) { bd = d; best = q; } }
+    if (!best || bd > 400) { tip.style.display = "none"; ring.setAttribute("display", "none"); return; }
+    const [x, y] = xy(best); ring.setAttribute("cx", x); ring.setAttribute("cy", y); ring.removeAttribute("display");
+    placeTip(tip, card, f, x, y, html(best));
+  });
+  hit.addEventListener("mouseleave", () => { tip.style.display = "none"; ring.setAttribute("display", "none"); });
+}
+
+/* ---------------------------------------------------------------- sections */
+function bars(card, title, vals, note) {
+  h("h3", null, title, card);
+  const ms = DATA.models, W = 1040, rowH = 34, H = ms.length * rowH + 36, L = 430;
+  const max = Math.max(...vals) * 1.12;
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": title}, card);
+  const X = v => L + v / max * (W - L - 70);
+  const g = el("g", {class: "grid"}, svg);
+  for (const t of ticks(0, max, 6)) { el("line", {x1: X(t), x2: X(t), y1: 0, y2: H - 30}, g); el("text", {x: X(t), y: H - 12, "text-anchor": "middle"}, svg).textContent = t; }
+  ms.forEach((m, i) => {
+    const y = i * rowH + 6, bh = 20, w = X(vals[i]) - X(0);
+    el("text", {class: "val", x: L - 12, y: y + bh / 2 + 4, "text-anchor": "end"}, svg).textContent = `${i + 1}. ${m.name}`;
+    el("path", {d: `M${X(0)},${y} h${w - 4} a4,4 0 0 1 4,4 v${bh - 8} a4,4 0 0 1 -4,4 h${-(w - 4)} Z`, fill: COLORS[i]}, svg);
+    el("text", {class: "val", x: X(vals[i]) + 8, y: y + bh / 2 + 4}, svg).textContent = vals[i].toFixed(4);
+  });
+  el("line", {class: "base", x1: X(0), x2: X(0), y1: 0, y2: H - 30}, svg);
+  if (note) h("p", "note", note, card);
+}
+const nOf = m => m.params ? m.params.N.toFixed(2) : "0.50";
+function summary(sec) {
+  h("h2", null, "Summary: all models on the same data", sec);
+  h("p", "about", `Each model is replayed on the board's raw force log and scored like the assessment (each tunnel reading against our output), ` +
+    `from t = ${DATA.span_from} s to the end (the raw log starts 8.4 s into the run). Every model gets its scale k and output delay D fitted; ` +
+    `models 5–8 also fit the settings named in their titles.`, sec);
+  const ms = DATA.models, base = ms[0];
+  bars(h("div", "card", null, sec), "Held-out MSE: fitted on one half of the run, scored on the other half (lower is better)", ms.map(m => m.holdout),
+    "The honest test. The halves differ (first half mostly fast, second mostly slow), so a model only scores well here if what it learned on one half still holds on the other.");
+  bars(h("div", "card", null, sec), "MSE fitted and scored on the same data (lower is better)", ms.map(m => m.mse),
+    "The easier test: extra fitted settings always help here, even when they only fit noise.");
+  const t = h("div", "card", null, sec);
+  h("h3", null, "Fitted parameters", t);
+  h("div", null, `<table><thead><tr><th>Model</th><th>held-out MSE</th><th>vs current</th><th>MSE (same data)</th><th>bias (m/s)</th><th>delay D (ms)</th><th>exponent N</th></tr></thead><tbody>` +
+    ms.map((m, i) => `<tr><td><span class="sw2" style="background:${COLORS[i]}"></span>${i + 1}. ${m.name}</td><td>${m.holdout.toFixed(4)}</td><td>${i ? fmt((m.holdout / base.holdout - 1) * 100, 0) + "%" : "–"}</td><td>${m.mse.toFixed(4)}</td><td>${fmt(m.bias, 3)}</td><td>${m.delay_ms}</td><td>${nOf(m)}</td></tr>`).join("") +
+    `</tbody></table>`, t);
+  const bestI = ms.reduce((bi, m, i) => m.holdout < ms[bi].holdout ? i : bi, 0);
+  h("p", "note", `<b>Result:</b> the big gain is the exponent (model 5): N = ${nOf(ms[4])} instead of ½ cuts the held-out MSE by ` +
+    `${((1 - ms[4].holdout / base.holdout) * 100).toFixed(0)}%. Best held-out: model ${bestI + 1}. The smoother and the EKF change little; ` +
+    `tuning more settings (model 6) fits the same data slightly better but does worse held-out, which means it's overfitting.`, t);
+  h("p", "note", `<b>Why two MSE numbers for the board?</b> The board's own stream scored ${DATA.board.mse_all.toFixed(3)} over the whole 97 s run ` +
+    `(the 0.085 from demo_day fit) and ${DATA.board.mse_span.toFixed(3)} on this span: the first 10 s were fan-off, where the tunnel flickers between ` +
+    `0.8 and 2.4 m/s. Only span numbers are compared here.`, t);
+}
+
+function explainB(sec) {
+  const E = DATA.explainB;
+  h("h2", null, "Idea B explained: the exponent", sec);
+  h("ol", "steps", `
+    <li>Drag physics says force ∝ v², so speed ∝ √force: exponent N = ½. That's what the board uses.</li>
+    <li>Real plates don't follow this exactly: the drag coefficient changes a little with speed, the mount bends, and flow wraps around the edges.</li>
+    <li>If N is wrong, no single scale k fits every speed: the error drifts with speed, reading high in the middle and low at the top.</li>
+    <li>Fitting N to the tunnel data (N = ${E.N.toFixed(2)}) flattens that drift. It's one number, and the board's <code>n</code> command already sets it.</li>`, sec);
+  const card = h("div", "card", null, sec);
+  h("h3", null, "Average error at each tunnel speed (0.5 m/s bins)", card);
+  h("div", "legend", `<span><i style="background:var(--series-1)"></i>Model 1: N = ½ (board now)</span><span><i style="background:var(--series-5)"></i>Model 5: N = ${E.N.toFixed(2)}</span>`, card);
+  const all = E.current.concat(E.b_exp), lim = Math.max(0.6, Math.ceil(Math.max(...all.map(p => Math.abs(p[1]))) * 5) / 5);
+  const f = frame(card, 1040, 320, 0, 11, -lim, lim, "tunnel speed (m/s)", "mean error, model − tunnel (m/s)");
+  el("line", {class: "base", x1: f.m.l, x2: f.W - f.m.r, y1: f.Y(0), y2: f.Y(0)}, f.svg);
+  for (const [pts, c] of [[E.current, "var(--series-1)"], [E.b_exp, "var(--series-5)"]]) {
+    el("path", {d: pathD(pts, f.X, f.Y), fill: "none", stroke: c, "stroke-width": 2}, f.svg);
+    for (const p of pts) el("circle", {cx: f.X(p[0]), cy: f.Y(p[1]), r: 4, fill: c, stroke: "var(--surface-1)", "stroke-width": 2}, f.svg);
+  }
+  crosshair(card, f, [{name: "N = ½", pts: E.current, color: "var(--series-1)"}, {name: `N = ${E.N.toFixed(2)}`, pts: E.b_exp, color: "var(--series-5)"}],
+    t => `tunnel ≈ ${t.toFixed(1)} m/s`);
+  h("p", "note", "With N = ½ (blue) the error has a trend: high at 2–5 m/s and low above 10 m/s. With the fitted exponent (pink) the trend is gone: the 2–5 m/s hump drops toward zero and the top end comes up. " +
+    "The wiggles that remain look the same in both curves: they come from particular moments in the run (and few readings below 2.5 m/s), not from the exponent.", card);
+}
+
+function explainC(sec) {
+  const E = DATA.explainC;
+  h("h2", null, "Idea C explained: what the tunnel shows at low speed", sec);
+  h("ol", "steps", `
+    <li>We're scored against the tunnel's <i>reading</i>, not the true wind. With the fan off, the tunnel mostly shows 0.8 m/s, with jumps to 1.5–2.4 m/s.</li>
+    <li>The best constant to output then is the <b>mean</b> of those readings, jumps included: ${E.floor_value.toFixed(2)} m/s (the board uses ${E.floor_board.toFixed(2)}).</li>
+    <li>The full version of C assumed those jumps are noise that's also added while the fan runs. That would make the tunnel read high at 2–4 m/s (violet curve).</li>
+    <li>The dots show what the tunnel actually read: they follow the diagonal, not the violet curve. Most jumps happen while the fan spins up or coasts (real air moving). So full C is rejected; only the floor part is kept.</li>`, sec);
+  const card = h("div", "card", null, sec);
+  h("h3", null, "Tunnel reading vs our speed estimate (exponent-corrected, before any floor)", card);
+  h("div", "legend", `<span><i class="dot" style="background:var(--raw)"></i>Tunnel readings</span>` +
+    `<span><i style="background:var(--series-1)"></i>Board now: floor ${E.floor_board.toFixed(2)}</span>` +
+    `<span><i style="background:var(--series-8)"></i>Floor = mean fan-off reading ${E.floor_value.toFixed(2)}</span>` +
+    `<span><i style="background:var(--series-7)"></i>Full C (rejected)</span>`, card);
+  const f = frame(card, 1040, 380, 0, 4.5, 0, 4.5, "our speed estimate before the floor (m/s)", "tunnel reading (m/s)");
+  el("line", {x1: f.X(0), y1: f.Y(0), x2: f.X(4.5), y2: f.Y(4.5), stroke: "var(--axis)", "stroke-width": 1.5, "stroke-dasharray": "4 4"}, f.svg);
+  for (const p of E.pts) el("circle", {cx: f.X(p[0]), cy: f.Y(Math.min(p[1], 4.5)), r: 3, fill: "var(--raw)"}, f.svg);
+  el("path", {d: pathD(E.vdas, f.X, f.Y), fill: "none", stroke: "var(--series-7)", "stroke-width": 2}, f.svg);
+  el("path", {d: pathD(E.floor, f.X, f.Y), fill: "none", stroke: "var(--series-1)", "stroke-width": 2}, f.svg);
+  el("path", {d: pathD(E.floor_rest, f.X, f.Y), fill: "none", stroke: "var(--series-8)", "stroke-width": 2, "stroke-dasharray": "6 3"}, f.svg);
+  hoverDots(card, f, E.pts, p => [f.X(p[0]), f.Y(Math.min(p[1], 4.5))], p => `estimate ${p[0].toFixed(2)} m/s<br>tunnel ${p[1].toFixed(2)} m/s`, "var(--raw)");
+  h("p", "note", "The dots at the bottom left are the fan-off after the run (the raw log misses the first one): our estimate is below 1 m/s, while the tunnel reads 0.8 most of the time and jumps to 2–2.4 as the air coasts down. " +
+    "No floor can match both; the mean of the fan-off readings gives the lowest squared error. Above about 1.5 m/s the dots follow the diagonal, which is why full C (violet) is rejected.", card);
+}
+
+function explainA(sec) {
+  const E = DATA.explainer;
+  h("h2", null, "Idea A explained: using the readings we wait for anyway", sec);
+  h("ol", "steps", `
+    <li>The tunnel reports the wind about ${E.delay_ms} ms late, so to line up we send each speed ${E.delay_ms} ms late too.</li>
+    <li><b>Live filter (blue):</b> works out the wind at time t using only readings up to t, then just holds that number until it's sent.</li>
+    <li><b>Smoother (orange):</b> waits the same ${E.delay_ms} ms, but uses the readings that arrive during the wait to redo its estimate for time t before sending it.</li>
+    <li>If a reading jumps and the next ones stay up, it was a real change: the smoother puts the change at the right moment. If they drop back, it was noise: the smoother ignores it.</li>
+    <li>Both are sent at exactly the same time, so the smoother costs no extra delay.</li>`, sec);
+  const card = h("div", "card", null, sec);
+  h("h3", null, `Zoom on a ${(E.to - E.from).toFixed(0)} s stretch with a fast change (x-axis = when the wind happened)`, card);
+  h("div", "legend", `<span><i class="dot" style="background:var(--raw)"></i>Raw readings (every 10 ms)</span>` +
+    `<span><i style="background:var(--gt)"></i>Tunnel (shifted back ${E.delay_ms} ms to line up)</span>` +
+    `<span><i style="background:var(--series-1)"></i>Live filter: estimate made at time t</span>` +
+    `<span><i style="background:var(--series-2)"></i>Smoother: estimate for t, made at t + ${E.delay_ms} ms</span>`, card);
+  const ys = E.raw.map(p => p[1]).concat(E.gt.map(p => p[1]));
+  const y0 = Math.floor(Math.min(...ys)), y1 = Math.ceil(Math.max(...ys));
+  const f = frame(card, 1040, 360, E.from, E.to, y0, y1, "time the wind happened (s since run start)", "speed (m/s)");
+  const gtIn = E.gt.filter(p => p[0] >= E.from - 0.3 && p[0] <= E.to);
+  for (const p of E.raw) el("circle", {cx: f.X(p[0]), cy: f.Y(Math.min(Math.max(p[1], y0), y1)), r: 2, fill: "var(--raw)"}, f.svg);
+  const clip = pts => pts.filter(p => p[0] >= E.from && p[0] <= E.to);
+  el("path", {d: pathD(clip(gtIn.map(p => [Math.max(p[0], E.from), p[1]])), f.X, f.Y, true), fill: "none", stroke: "var(--gt)", "stroke-width": 2}, f.svg);
+  el("path", {d: pathD(E.live, f.X, f.Y), fill: "none", stroke: "var(--series-1)", "stroke-width": 2}, f.svg);
+  el("path", {d: pathD(E.smooth, f.X, f.Y), fill: "none", stroke: "var(--series-2)", "stroke-width": 2}, f.svg);
+  crosshair(card, f, [{name: "Tunnel", pts: gtIn, color: "var(--gt)", step: true}, {name: "Live", pts: E.live, color: "var(--series-1)"},
+    {name: "Smoother", pts: E.smooth, color: "var(--series-2)"}], t => `wind at t = ${t.toFixed(2)} s`);
+  const gain = (1 - DATA.models[1].mse / DATA.models[0].mse) * 100;
+  h("p", "note", `The knob was turned by hand, so changes are gradual and the two lines stay close. The difference shows where the raw readings dip or bump: ` +
+    `the live filter (blue) follows each dip because it can't know yet that it's noise; the smoother (orange) has already seen the readings recover and stays on the trend. ` +
+    `Over the run the smoother is ${E.jitter_ratio}× less jittery, but that buys only ${gain.toFixed(1)}% lower MSE (see the summary): this run's error isn't mainly fast noise. ` +
+    `Note the tunnel's own jumps (e.g. the 2 m/s blip at the end): whole-Pa steps that no filter can predict.`, card);
+}
+
+function modelSection(sec, M, i) {
+  const color = COLORS[i];
+  h("h2", null, `Model ${i + 1}: ${M.name}`, sec);
+  h("div", "formula", M.formula, sec);
+  h("p", "about", M.about, sec);
+  h("div", "tiles", `
+    <div class="tile"><div class="k">MSE (same data)</div><div class="v">${M.mse.toFixed(4)}</div><div class="n">m²/s², t ≥ ${DATA.span_from} s</div></div>
+    <div class="tile"><div class="k">RMS error</div><div class="v">${M.rms.toFixed(2)}</div><div class="n">m/s</div></div>
+    <div class="tile"><div class="k">Mean bias</div><div class="v">${fmt(M.bias)}</div><div class="n">m/s (+ = reads high)</div></div>
+    <div class="tile"><div class="k">Held-out MSE</div><div class="v">${M.holdout.toFixed(4)}</div><div class="n">fit on one half, scored on the other</div></div>
+    <div class="tile"><div class="k">Fitted delay · exponent</div><div class="v">${M.delay_ms} ms</div><div class="n">N = ${nOf(M)}</div></div>`, sec);
+  let card = h("div", "card", null, sec);
+  h("h3", null, "Speed over the run: tunnel vs model", card);
+  h("div", "legend", `<span><i style="background:var(--gt)"></i>Tunnel (VDAS, 4 Hz)</span><span><i style="background:${color}"></i>Model ${i + 1}</span>`, card);
+  let f = frame(card, 1040, 300, 0, tEnd, 0, 12, "time since run start (s)", "speed (m/s)");
+  el("path", {d: pathD(DATA.gt, f.X, f.Y, true), fill: "none", stroke: "var(--gt)", "stroke-width": 2, "stroke-linejoin": "round"}, f.svg);
+  el("path", {d: pathD(M.line, f.X, f.Y), fill: "none", stroke: color, "stroke-width": 1.5, "stroke-linejoin": "round"}, f.svg);
+  el("rect", {x: f.X(0), y: f.m.t, width: f.X(DATA.span_from) - f.X(0), height: f.H - f.m.t - f.m.b, fill: "var(--grid)", opacity: .45}, f.svg);
+  el("text", {x: f.X(DATA.span_from / 2), y: f.m.t + 14, "text-anchor": "middle"}, f.svg).textContent = "no raw log";
+  crosshair(card, f, [{name: "Tunnel", pts: DATA.gt, color: "var(--gt)", step: true}, {name: `Model ${i + 1}`, pts: M.line, color}], t => `t = ${t.toFixed(2)} s`);
+
+  card = h("div", "card", null, sec);
+  h("h3", null, "Error at each tunnel reading (model − tunnel)", card);
+  const lim = Math.max(1.5, Math.ceil(Math.max(...M.pts.map(p => Math.abs(p[2] - p[1]))) * 2) / 2);
+  f = frame(card, 1040, 190, 0, tEnd, -lim, lim, "time since run start (s)", "error (m/s)");
+  el("line", {class: "base", x1: f.m.l, x2: f.W - f.m.r, y1: f.Y(0), y2: f.Y(0)}, f.svg);
+  for (const p of M.pts) el("circle", {cx: f.X(p[0]), cy: f.Y(p[2] - p[1]), r: 2.6, fill: color, opacity: .85}, f.svg);
+  hoverDots(card, f, M.pts, p => [f.X(p[0]), f.Y(p[2] - p[1])], p => `<b>t = ${p[0].toFixed(2)} s</b><br>Tunnel ${p[1].toFixed(2)} · model ${p[2].toFixed(2)} m/s<br>error ${fmt(p[2] - p[1])} m/s`, color);
+
+  const row = h("div", "row2", null, sec);
+  card = h("div", "card", null, row);
+  h("h3", null, "Model vs tunnel (on the dashed diagonal = perfect)", card);
+  f = frame(card, 520, 360, 0, 12, 0, 12, "tunnel speed (m/s)", "model speed (m/s)");
+  el("line", {x1: f.X(0), y1: f.Y(0), x2: f.X(12), y2: f.Y(12), stroke: "var(--axis)", "stroke-width": 1.5, "stroke-dasharray": "4 4"}, f.svg);
+  for (const p of M.pts) el("circle", {cx: f.X(p[1]), cy: f.Y(p[2]), r: 3, fill: color, opacity: .55}, f.svg);
+  hoverDots(card, f, M.pts, p => [f.X(p[1]), f.Y(p[2])], p => `<b>t = ${p[0].toFixed(2)} s</b><br>Tunnel ${p[1].toFixed(2)} m/s<br>Model ${p[2].toFixed(2)} m/s<br>error ${fmt(p[2] - p[1])} m/s`, color);
+  card = h("div", "card", null, row);
+  h("h3", null, "Error by speed band", card);
+  h("div", null, `<table><thead><tr><th>Tunnel speed</th><th>readings</th><th>bias (m/s)</th><th>RMS error (m/s)</th></tr></thead><tbody>` +
+    M.bands.map(b => `<tr><td>${b.band} m/s</td><td>${b.n}</td><td>${fmt(b.bias)}</td><td>${b.rms.toFixed(2)}</td></tr>`).join("") +
+    `</tbody></table><p class="note">Bias above 0 = model reads high. A bias that trends with speed points at the exponent (the ½ in √F).</p>`, card);
+}
+
+document.getElementById("sub").textContent = `Run ${DATA.run}: ${DATA.gt.length} tunnel readings over ${tEnd} s (knob: off, max, ¾, ½, ¼, max, off). ` +
+  `Offline replay of candidate models on the board's raw force log. The board firmware is unchanged.`;
+const wrap = document.getElementById("wrap");
+const want = id => !ONLY || ONLY === id;
+if (ONLY && ONLY !== "summary") document.getElementById("hdr").style.display = "none";
+if (want("summary")) summary(h("section", null, null, wrap));
+if (want("explainA")) explainA(h("section", null, null, wrap));
+if (want("explainB")) explainB(h("section", null, null, wrap));
+if (want("explainC")) explainC(h("section", null, null, wrap));
+DATA.models.forEach((M, i) => { if (want(M.id)) modelSection(h("section", null, null, wrap), M, i); });
+document.body.dataset.h = Math.ceil(document.documentElement.scrollHeight);
+</script>
+</body>
+</html>
