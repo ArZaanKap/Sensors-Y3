@@ -1,0 +1,14 @@
+# --- airspeed calibration ---
+# model: v = max(S * max(L - L0 - DEAD, 0)^N, FLOOR), L Kalman-filtered (2-state CV)
+# S = 0.050900
+# N = 0.5000
+# DEAD_counts = 300.0
+# L0_counts = 656804.3
+# q_counts2_per_s3 = 10000000
+# r_counts2 = 2250000
+# floor_mps = 0.000
+# delay_ms = 0
+# raw_mode = 0
+# zeroed = 1
+# i2c_bus_resets = 0
+# --- end ---

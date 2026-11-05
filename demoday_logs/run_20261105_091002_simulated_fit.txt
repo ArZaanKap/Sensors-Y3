@@ -1,0 +1,6 @@
+run run_20261105_091002_simulated_aligned.csv
+fitted 2026-11-05 09:12:06
+k 1.02424  lag 1500 ms  floor 0.000 m/s
+S 0.050900 -> 0.052134
+delay_ms 0 -> 1500
+floor_mps 0.000 -> 0.000

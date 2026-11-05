@@ -90,7 +90,8 @@ def do_zero(a):
     t0, buf = time.time(), ""
     while time.time() - t0 < 6:
         buf += ser.read(ser.in_waiting or 1).decode("ascii", "replace")
-        line = next((l for l in buf.splitlines() if l.startswith("# zero L0")), None)
+        complete = buf.split("\n")[:-1]          # ignore a half-received last line
+        line = next((l.strip() for l in complete if l.startswith("# zero L0") and "sd =" in l), None)
         if line:
             sd = float(line.split("sd =")[1].split()[0])
             print(f"Done: {line[2:]}  ->  {'OK' if sd < 600 else 'NOISY: fan on or rig moving? run zero again'}")
@@ -133,8 +134,8 @@ def dump_raw(ser):
     path = os.path.join(DEMO_LOGS, time.strftime("raw_%Y%m%d_%H%M%S.csv"))
     with open(path, "w", newline="") as f:
         f.write(f"# board raw recorder: dt_us={dt} L0={head['L0']} (load_raw = NAU7802 counts, "
-                f"ang_raw = AS5048B 0..16383 or -1)\n")
-        f.write("timestamp_epoch,t_us,load_raw,ang_raw\n")
+                f"ang_raw = AS5048B 0..16383 or -1, mic_env = Sound Detector envelope 0..255)\n")
+        f.write("timestamp_epoch,t_us,load_raw,ang_raw,mic_env\n")
         for i, l in enumerate(rows):
             t_us = (last - (len(rows) - 1 - i) * dt) & 0xFFFFFFFF
             ep = t_pc - ((now - t_us) & 0xFFFFFFFF) / 1e6
@@ -257,6 +258,8 @@ def do_fit(a):
     print(f"  floor {cur.get('floor_mps', 0):6.2f} -> {F:6.2f} m/s")
     if abs(k - 1) > 0.5:
         print("  !! scale changes by over 50% - right run? right tunnel?")
+    if lag >= 1.45:
+        print("  !! delay hit the 1.5 s search limit - no real lag found. Answer n unless the MSE drop is big.")
     rec = run[: -len("_aligned.csv")] + "_fit.txt"
     with open(rec, "w") as f:
         f.write(f"run {os.path.basename(run)}\n"

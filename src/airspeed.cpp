@@ -27,7 +27,7 @@
 //   x          restore the built-in defaults (and save)
 //   D          dump the raw recorder (see below) as text, then resume
 //
-// Raw recorder: the last REC_N samples of raw load and rotor angle at 100 Hz
+// Raw recorder: the last REC_N samples of raw load, rotor angle and mic envelope at 100 Hz
 // (~170 s) are kept in RAM all the time, so a tunnel run's raw data can be
 // downloaded afterwards ('D', tools/demo_day.py raw) while WindTunnelLogger
 // only ever sees the speed stream.
@@ -44,6 +44,7 @@
 static const uint32_t I2C_SDA = PB9;   // D14
 static const uint32_t I2C_SCL = PB8;   // D15
 static const uint8_t AS5048B_ADDR = 0x40;
+static const uint8_t MIC_PIN = A1;           // PA1 <- Sound Detector ENVELOPE (raw recorder only)
 static const uint32_t SAMPLE_US = 5000;      // 200 Hz
 static const float DT = SAMPLE_US * 1e-6f;
 static const uint32_t STALL_MS = 100;        // no load conversion this long = bus stuck
@@ -209,21 +210,33 @@ static void printCalibration() {
 }
 
 // ---------------------------------------------------------------- raw recorder
-static const int32_t LOAD_NONE = INT32_MIN;
-static int32_t recLoad[REC_N];
+// Load is 24-bit (NAU7802), packed into 3 bytes so the mic byte fits in the same RAM.
+static const int32_t LOAD_NONE = -8388608;     // 0x800000, the int24 minimum
+static uint8_t recLoad[REC_N][3];
 static int16_t recAng[REC_N];
+static uint8_t recMic[REC_N];                  // mic envelope, 10-bit ADC >> 2 (0..255)
 static int recHead = 0, recCount = 0;
 static uint32_t recLastUs = 0;
 
-static void recordSample(uint32_t t, int32_t load, int16_t ang) {
-  recLoad[recHead] = load;
+static inline int32_t recLoadAt(int j) {
+  int32_t v = (int32_t)recLoad[j][0] | ((int32_t)recLoad[j][1] << 8) | ((int32_t)recLoad[j][2] << 16);
+  return (v & 0x800000) ? v - 0x1000000 : v;   // sign-extend 24 -> 32 bits
+}
+
+static void recordSample(uint32_t t, int32_t load, int16_t ang, uint8_t mic) {
+  if (load < -8388608) load = -8388608;
+  if (load > 8388607) load = 8388607;
+  recLoad[recHead][0] = load & 0xFF;
+  recLoad[recHead][1] = (load >> 8) & 0xFF;
+  recLoad[recHead][2] = (load >> 16) & 0xFF;
   recAng[recHead] = ang;
+  recMic[recHead] = mic;
   recHead = (recHead + 1) % REC_N;
   if (recCount < REC_N) recCount++;
   recLastUs = t;
 }
 
-// Text dump, oldest first: header, one "load,ang" line per sample, footer.
+// Text dump, oldest first: header, one "load,ang,mic" line per sample, footer.
 // ~15 s at 115200 baud; the speed stream pauses meanwhile.
 static void dumpRecorder() {
   int n = recCount;
@@ -237,7 +250,8 @@ static void dumpRecorder() {
   char b[32];
   for (int i = 0; i < n; i++) {
     int j = (start + i) % REC_N;
-    int len = snprintf(b, sizeof(b), "%ld,%d\n", recLoad[j] == LOAD_NONE ? -99999L : (long)recLoad[j], recAng[j]);
+    int32_t ld = recLoadAt(j);
+    int len = snprintf(b, sizeof(b), "%ld,%d,%u\n", ld == LOAD_NONE ? -99999L : (long)ld, recAng[j], (unsigned)recMic[j]);
     Serial.write((const uint8_t *)b, len);
   }
   Serial.println("# end");
@@ -335,7 +349,10 @@ void loop() {
   bool recNow = ++recTick >= REC_EVERY;
   if (recNow) recTick = 0;
   int ang = (P.raw || recNow) ? readAngle() : -1;
-  if (recNow) recordSample(t, isnan(load) ? LOAD_NONE : (int32_t)load, (int16_t)ang);
+  if (recNow) {
+    uint8_t mic = analogRead(MIC_PIN) >> 2;   // 10-bit -> 8-bit envelope
+    recordSample(t, isnan(load) ? LOAD_NONE : (int32_t)load, (int16_t)ang, mic);
+  }
 
   float f = 0, v = 0;
   if (zeroing) {
@@ -343,8 +360,9 @@ void loop() {
     if (!isnan(load)) { zSum += load; zSq += (double)load * load; zN++; }
     digitalWrite(LED_BUILTIN, (millis() / 100) & 1);
     if (millis() - zeroStart >= ZERO_MS && zN > 50) {
-      L0 = zSum / zN;
-      float sd = sqrt(fmax(zSq / zN - (double)L0 * L0, 0.0));
+      double mean = zSum / zN;                     // double: float L0 (~6.5e5) squared loses the variance
+      float sd = sqrt(fmax(zSq / zN - mean * mean, 0.0));
+      L0 = mean;
       zeroing = false;
       zeroed = true;
       kalmanReset(0);
